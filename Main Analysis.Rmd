@@ -1,0 +1,449 @@
+---
+title: "Stock Index Cointegration Analysis"
+author: "Nova Nguyen"
+date: "2023-10-17"
+output: html_document
+---
+
+```{r Setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+require(astsa) #Library for book
+require(xts)
+require(dplyr)
+library(tseries) # Augmented Dickey-Fuller test
+require(lmtest) # Durbin Watson test
+require(fBasics) # normality tests of residuals
+require(leaps)
+require(urca) # ERS test of stationarity
+library(lubridate)
+library(tidyr)
+library(strucchange) # Gregory Hansen test
+library(urca)
+library(aTSA)
+library(vars)
+library(tsDyn)
+```
+
+## DATA PROCESSING
+
+```{r Datasets}
+#All cell information are read in as character variables
+
+VNI <- read.csv("Datasets/VN Index Historical Data.csv")   # Vietnam
+US <- read.csv("Datasets/SP500 Historical Prices.csv")   # US WSJ
+CHN <- read.csv("Datasets/Shanghai Composite Historical Data.csv")   # China
+HK <- read.csv("Datasets/Hang Seng Historical Data.csv")   # Hong Kong
+JPN <- read.csv("Datasets/Nikkei 225 Historical Data.csv")   # Japan
+SK <- read.csv("Datasets/KOSPI Historical Data.csv")   # South Korea
+THL <- read.csv("Datasets/SET Index Historical Data.csv")   # Thailand
+SGP <- read.csv("Datasets/STI Historical Prices.csv")   # Singapore WSJ
+MSIA <- read.csv("Datasets/^KLSE.csv")   # Malaysia yahoo
+PLP <- read.csv("Datasets/PSEi.PS.csv")   # Philippines yahoo
+IND <- read.csv("Datasets/Jakarta Stock Exchange Composite Index Historical Data.csv")   # Indonesia
+```
+
+```{r Data Cleaning, warning = FALSE}
+
+# Define a function for data processing
+process <- function(data) {
+  data = data %>%
+    dplyr:::select(Date, Price)
+  data$Date = as.Date(data$Date, "%m/%d/%Y")
+  data$Price = as.numeric(gsub(",", "", data$Price))
+  data = data[order(data$Date),]
+  return(data)
+}
+
+# Apply the data processing function to each dataframe
+VNI = process(VNI)
+CHN = process(CHN)
+HK = process(HK)
+JPN = process(JPN)
+SK = process(SK)
+THL = process(THL)
+IND = process(IND)
+
+## US
+US = US %>%
+  dplyr:::select(Date, Close)
+US$Date = as.Date(US$Date, "%m/%d/%y")
+US = US[order(US$Date),]
+US <- rename(US, Price = Close)
+
+## SGP
+SGP = SGP %>%
+  dplyr:::select(Date, Close)
+SGP$Date = as.Date(SGP$Date, "%m/%d/%y")
+SGP = SGP[order(SGP$Date),]
+SGP <- rename(SGP, Price = Close)
+
+## MSIA
+MSIA = MSIA %>%
+  dplyr:::select(Date, Close)
+MSIA$Date = as.Date(MSIA$Date)
+MSIA = MSIA[order(MSIA$Date),]
+MSIA <- rename(MSIA, Price = Close)
+MSIA = MSIA %>%
+  mutate(Price = round(as.numeric(Price), 2)) %>%
+  drop_na()
+
+## PLP
+PLP = PLP %>%
+  dplyr:::select(Date, Close)
+PLP$Date = as.Date(PLP$Date)
+PLP = PLP[order(PLP$Date),]
+PLP <- rename(PLP, Price = Close)
+PLP = PLP %>%
+  mutate(Price = round(as.numeric(Price), 2)) %>%
+  drop_na()
+
+```
+
+
+```{r Merge into common df, warning = FALSE}
+
+# List the dataframes  
+dfs <- list(VNI, US, CHN, JPN, HK, SK, SGP, THL, MSIA, PLP, IND)
+
+# Merge into one dataframe
+df <- Reduce(function(x, y) merge(x, y, by = "Date"), dfs)
+
+# Rename columns
+colnames(df) <- c("Date", "VNI", "US", "CHN", "JPN", "HK", "SK", "SGP", "THL", "MSIA", "PLP", "IND")
+
+head(df)
+```
+
+
+## TIME SERIES VISUALIZATION
+
+```{r}
+dfnames <- list("VNI", "US", "CHN", "JPN", "HK", "SK", "SGP", "THL", "MSIA", "PLP", "IND")
+par(mfrow = c(3,4))
+
+for(i in 1:length(dfs)){
+  tsplot(dfs[[i]]$Date, dfs[[i]]$Price, main = dfnames[i], ylab = dfnames[i])
+}
+```
+
+## TIME SERIES INTEGRATION ORDER
+
+```{r}
+# If the series is stationary or does not have a unit root, it has an integration order of I(0). Taking differences of the time series until it displays stationarity, I(1) means the first difference of the series is I(0), I(2) means the second difference is I(0)...
+
+for(i in 1:length(dfs)){
+  print(dfnames[i])
+  print(tseries:::adf.test(as.data.frame(dfs[i])$Price))
+}
+
+#
+```
+
+
+## ENGLE GRANGER 2 STEP COINTEGRATION TEST
+
+```{r VN - each country}
+# Loop through each dataframe
+
+
+for(i in 2:length(dfs)){
+
+  # Merge VNI with each df
+  df <- Reduce(function(x, y) merge(x, y, by = "Date"), list(VNI, dfs[i]))
+
+  # Rename columns
+  colnames(df) <- c("Date", "VNI", dfnames[i])
+
+  model <- lm(df$VNI ~ df[,3])
+
+  # Conduct ADF test on residuals
+  print(dfnames[i])
+  print(tsplot(residuals(model), main = dfnames[i], ylab = dfnames[i]))
+  print(tseries:::adf.test(residuals(model)))
+}
+```
+
+
+
+
+## EG TEST WITH BUILT IN FUNCTION WHOLE DATASET
+
+```{r VN - each country}
+for(i in 2:length(dfs)){
+
+  # Merge VNI with each df
+  df <- Reduce(function(x, y) merge(x, y, by = "Date"), list(VNI, dfs[i]))
+ 
+  # Rename columns
+  colnames(df) <- c("Date", "VNI", dfnames[i])
+
+  result <- aTSA::coint.test(df$VNI, df[,3], d = 0)
+
+  # Conduct ADF test on residuals
+  print(dfnames[i])
+  print(result)
+}
+
+```
+
+## GRANGER CAUSALITY
+
+```{r VN - each country}
+for(i in 2:length(dfs)){
+
+  # Merge VNI with each df
+  df <- Reduce(function(x, y) merge(x, y, by = "Date"), list(VNI, dfs[i]))
+ 
+  # Rename columns
+  colnames(df) <- c("Date", "VNI", dfnames[i])
+
+  result1 <- grangertest(df$VNI, df[,3])
+  result2 <- grangertest(df[,3], df$VNI)
+
+  # Conduct ADF test on residuals
+  print(dfnames[i])
+  print(result1)
+  print(result2)
+}
+
+#US, JPN, SK exert influence on VNI; VNI does not exert influence on any other TS
+```
+
+
+##EG TEST 2003 - 2007
+
+```{r}
+for(i in 2:length(dfs)){
+
+  # Merge VNI with each df
+  df <- Reduce(function(x, y) merge(x, y, by = "Date"), list(VNI, dfs[i]))
+ 
+  # Rename columns
+  colnames(df) <- c("Date", "VNI", dfnames[i])
+  
+  df <- df %>%
+  filter(Date >= as.Date("2003-10-01"), Date < as.Date("2007-01-01"))
+
+  result <- aTSA::coint.test(df$VNI, df[,3], d = 0, output = TRUE)
+
+  # Conduct ADF test on residuals
+  print(dfnames[i])
+  print(result)
+}
+
+```
+
+##EG TEST 2007 - 2010
+
+```{r}
+for(i in 2:length(dfs)){
+
+  # Merge VNI with each df
+  df <- Reduce(function(x, y) merge(x, y, by = "Date"), list(VNI, dfs[i]))
+ 
+  # Rename columns
+  colnames(df) <- c("Date", "VNI", dfnames[i])
+  
+  df <- df %>%
+  filter(Date >= as.Date("2007-01-01"), Date < as.Date("2010-01-01"))
+
+  result <- aTSA::coint.test(df$VNI, df[,3], d = 0, output = TRUE)
+
+  # Conduct ADF test on residuals
+  print(dfnames[i])
+  print(result)
+}
+```
+
+##EG TEST 2010 - 2014
+
+```{r}
+for(i in 2:length(dfs)){
+
+  # Merge VNI with each df
+  df <- Reduce(function(x, y) merge(x, y, by = "Date"), list(VNI, dfs[i]))
+ 
+  # Rename columns
+  colnames(df) <- c("Date", "VNI", dfnames[i])
+  
+  df <- df %>%
+  filter(Date >= as.Date("2010-01-01"), Date < as.Date("2014-01-01"))
+
+  result <- aTSA::coint.test(df$VNI, df[,3], d = 0, output = TRUE)
+
+  # Conduct ADF test on residuals
+  print(dfnames[i])
+  print(result)
+}
+```
+
+
+##EG TEST 2014 - 2020
+
+```{r}
+for(i in 2:length(dfs)){
+
+  # Merge VNI with each df
+  df <- Reduce(function(x, y) merge(x, y, by = "Date"), list(VNI, dfs[i]))
+ 
+  # Rename columns
+  colnames(df) <- c("Date", "VNI", dfnames[i])
+  
+  df <- df %>%
+  filter(Date >= as.Date("2014-01-01"), Date < as.Date("2020-01-01"))
+
+  result <- aTSA::coint.test(df$VNI, df[,3], d = 0, output = TRUE)
+
+  # Conduct ADF test on residuals
+  print(dfnames[i])
+  print(result)
+}
+```
+
+##EG TEST 2020 - 2022
+
+```{r}
+for(i in 2:length(dfs)){
+
+  # Merge VNI with each df
+  df <- Reduce(function(x, y) merge(x, y, by = "Date"), list(VNI, dfs[i]))
+ 
+  # Rename columns
+  colnames(df) <- c("Date", "VNI", dfnames[i])
+  
+  df <- df %>%
+  filter(Date >= as.Date("2020-01-01"), Date < as.Date("2023-01-01"))
+
+  result <- aTSA::coint.test(df$VNI, df[,3], d = 0, output = TRUE)
+
+  # Conduct ADF test on residuals
+  print(dfnames[i])
+  print(result)
+}
+```
+
+##EG TEST 2023 - current
+
+```{r}
+for(i in 2:length(dfs)){
+
+  # Merge VNI with each df
+  df <- Reduce(function(x, y) merge(x, y, by = "Date"), list(VNI, dfs[i]))
+ 
+  # Rename columns
+  colnames(df) <- c("Date", "VNI", dfnames[i])
+  
+  df <- df %>%
+  filter(Date >= as.Date("2023-01-01"))
+
+  result <- aTSA::coint.test(df$VNI, df[,3], d = 0, output = TRUE)
+
+  # Conduct ADF test on residuals
+  print(dfnames[i])
+  print(result)
+}
+```
+
+
+## VECM ESTIMATION 2003 - 2007
+
+```{r}
+for(i in 2:length(dfs)){
+
+  # Merge VNI with each df
+  df <- Reduce(function(x, y) merge(x, y, by = "Date"), list(VNI, dfs[i]))
+ 
+  # Rename columns
+  colnames(df) <- c("Date", "VNI", dfnames[i])
+  
+  df <- df %>%
+    filter(Date >= as.Date("2003-10-01"), Date < as.Date("2007-01-01")) %>%
+    dplyr:::select(-Date)
+
+  result <- VECM(df, lag = 1)
+
+  # Conduct ADF test on residuals
+  print(dfnames[i])
+  print(summary(result))
+}
+
+```
+
+##JOHANSEN COINTEGRATION TEST WHOLE DATASET
+
+```{r VN ~ East Asia}
+dfs <- list(VNI, CHN, JPN, HK, SK)
+
+df <- Reduce(function(x, y) merge(x, y, by = "Date"), dfs)
+
+colnames(df) <- c("Date", "VNI", "CHN", "JPN", "HK", "SK")
+
+df <- df %>%
+  dplyr:::select(-Date)
+
+johansen <- ca.jo(df, type = "eigen", ecdet = "none", K = 2, spec = "longrun")
+summary(johansen)
+```
+
+
+```{r VN ~ South East Asia}
+dfs <- list(VNI, SGP, THL, MSIA, PLP, IND)
+
+df <- Reduce(function(x, y) merge(x, y, by = "Date"), dfs)
+
+colnames(df) <- c("Date", "VNI", "SGP", "THL", "MSIA", "PLP", "IND")
+
+df <- df %>%
+  dplyr:::select(-Date)
+
+johansen <- ca.jo(df, type = "eigen", ecdet = "none", K = 2, spec = "longrun")
+summary(johansen)
+```
+
+## JOHANSEN COINTEGRATION TEST 2020 - 2023
+
+```{r VN ~ East Asia}
+dfs <- list(VNI, CHN, JPN, HK, SK)
+
+df <- Reduce(function(x, y) merge(x, y, by = "Date"), dfs)
+
+colnames(df) <- c("Date", "VNI", "CHN", "JPN", "HK", "SK")
+
+df <- df %>%
+  filter(Date > as.Date("2020-01-01"), Date < as.Date("2023-01-01")) %>%
+  dplyr:::select(-Date)
+
+johansen <- ca.jo(df, type = "eigen", ecdet = "none", K = 2, spec = "longrun")
+summary(johansen)
+```
+
+## STRUCTURAL BREAKS DETECTION
+
+```{r}
+
+dfs <- list(VNI, US, CHN, JPN, HK, SK, SGP, THL, MSIA, PLP, IND)
+
+for(i in 1:length(dfs)){
+  y = as.data.frame(dfs[i])$Price
+
+  dat <- tibble(ylag0 = y,
+                ylag1 = lag(y)
+                ) %>%
+    drop_na()
+
+  qlr <- Fstats(ylag0 ~ ylag1, data = dat)
+
+  bp <- breakpoints(qlr, h = 2, breaks = NULL)
+  bp
+
+  sctest(qlr, type = "supF")
+
+  plot(qlr, main = paste(dfnames[i], as.data.frame(dfs[i])[as.numeric(bp[1]), 1]))
+  lines(bp)
+}
+```
+
+
+
+
+
