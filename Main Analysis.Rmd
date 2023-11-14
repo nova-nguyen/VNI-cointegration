@@ -7,7 +7,7 @@ output: html_document
 
 ```{r Setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-require(astsa) #Library for book
+require(astsa) 
 require(xts)
 require(dplyr)
 library(tseries) # Augmented Dickey-Fuller test
@@ -17,8 +17,7 @@ require(leaps)
 require(urca) # ERS test of stationarity
 library(lubridate)
 library(tidyr)
-library(strucchange) # Gregory Hansen test
-library(urca)
+library(strucchange) 
 library(aTSA)
 library(vars)
 library(tsDyn)
@@ -47,7 +46,7 @@ IND <- read.csv("Datasets/Jakarta Stock Exchange Composite Index Historical Data
 # Define a function for data processing
 process <- function(data) {
   data = data %>%
-    dplyr:::select(Date, Price)
+    dplyr::select(Date, Price)
   data$Date = as.Date(data$Date, "%m/%d/%Y")
   data$Price = as.numeric(gsub(",", "", data$Price))
   data = data[order(data$Date),]
@@ -117,78 +116,159 @@ head(df)
 
 ## TIME SERIES VISUALIZATION
 
-```{r}
+```{r index price}
 dfnames <- list("VNI", "US", "CHN", "JPN", "HK", "SK", "SGP", "THL", "MSIA", "PLP", "IND")
-par(mfrow = c(3,4))
+par(mfrow = c(2,2))
 
-for(i in 1:length(dfs)){
-  tsplot(dfs[[i]]$Date, dfs[[i]]$Price, main = dfnames[i], ylab = dfnames[i])
+for(i in 1:length(dfnames)){
+  tsplot(dfs[[i]]$Date, dfs[[i]]$Price, main = dfnames[i], ylab = '', xlab = '')
 }
 ```
 
-## TIME SERIES INTEGRATION ORDER
+```{r log-return index price}
+dfnames <- list("VNI", "US", "CHN", "JPN", "HK", "SK", "SGP", "THL", "MSIA", "PLP", "IND")
+break_dates <- as.Date(c("2007-01-01", "2010-01-01", "2020-01-01", "2022-01-01"))
+
+par(mfrow = c(2,2))
+
+for(i in 1:length(dfnames)){
+  tsplot(dfs[[i]]$Date, log(dfs[[i]]$Price), main = dfnames[i], ylim = c(5.0, 11.0), ylab = '', xlab = '')
+  
+  # Add vertical lines at specific dates
+  for (date in break_dates) {
+    abline(v = date, col = "red")
+  }
+}
+
+```
+
+
+
+```{r differential log return}
+dfnames <- list("VNI", "US", "CHN", "JPN", "HK", "SK", "SGP", "THL", "MSIA", "PLP", "IND")
+break_dates <- as.Date(c("2007-01-01", "2010-01-01", "2020-01-01", "2022-01-01"))
+
+par(mfrow = c(2,2))
+
+for(i in 1:length(dfnames)){
+  tsplot(dfs[[i]]$Date[-1], diff(log(dfs[[i]]$Price)), main = dfnames[i], ylim = c(-0.1, 0.1), ylab = '', xlab = '')
+  
+  # Add vertical lines at specific dates
+  for (date in break_dates) {
+    abline(v = date, col = "red")
+  }
+}
+
+```
+
+## SUMMARY STATISTICS
 
 ```{r}
-# If the series is stationary or does not have a unit root, it has an integration order of I(0). Taking differences of the time series until it displays stationarity, I(1) means the first difference of the series is I(0), I(2) means the second difference is I(0)...
+for(i in 1:length(dfs)){
+  returns <- diff(log(as.data.frame(dfs[i])$Price))
+  print(dfnames[i])
+  print(summary(returns))
+}
+```
+
+```{r pre GFC}
+for (i in 1:length(dfs)) {
+  # Filter the data frame to include only rows before 2007-01-01
+  filtered_data <- dfs[[i]][dfs[[i]]$Date < as.Date("2007-01-01"), ]
+
+  if (nrow(filtered_data) > 0) {
+    # Calculate returns for the filtered data
+    returns <- diff(log(filtered_data$Price))
+    
+    # Print the dataframe name (dfnames[i]) and summary statistics
+    print(dfnames[i])
+    print(summary(returns))
+    tsplot(filtered_data$Date[-1], diff(log(filtered_data$Price)), main = dfnames[i], ylim = c(-0.05, 0.05), ylab = '', xlab = '')
+    print(sd(returns))
+  }
+}
+```
+
+```{r post GFC}
+for (i in 1:length(dfs)) {
+  # Filter the data frame to include only rows after 2010 and before 2015
+  filtered_data <- dfs[[i]][dfs[[i]]$Date >= as.Date("2010-01-01") & dfs[[i]]$Date < as.Date("2015-01-01"), ]
+
+  if (nrow(filtered_data) > 0) {
+    # Calculate returns for the filtered data
+    returns <- diff(log(filtered_data$Price))
+    
+    # Print the dataframe name (dfnames[i]) and summary statistics
+    print(dfnames[i])
+    print(summary(returns))
+    tsplot(filtered_data$Date[-1], diff(log(filtered_data$Price)), main = dfnames[i], ylim = c(-0.05, 0.05), ylab = '', xlab = '')
+    print(sd(returns))
+  }
+}
+```
+
+```{r pre Covid}
+for (i in 1:length(dfs)) {
+  # Filter the data frame to include only rows after 2015 and before 2020
+  filtered_data <- dfs[[i]][dfs[[i]]$Date >= as.Date("2015-01-01") & dfs[[i]]$Date < as.Date("2020-01-01"), ]
+
+  if (nrow(filtered_data) > 0) {
+    # Calculate returns for the filtered data
+    returns <- diff(log(filtered_data$Price))
+    
+    # Print the dataframe name (dfnames[i]) and summary statistics
+    print(dfnames[i])
+    print(summary(returns))
+    tsplot(filtered_data$Date[-1], diff(log(filtered_data$Price)), main = dfnames[i], ylim = c(-0.05, 0.05), ylab = '', xlab = '')
+    print(sd(returns))
+  }
+}
+```
+
+```{r post Covid}
+for (i in 1:length(dfs)) {
+  # Filter the data frame to include only rows after 2023
+  filtered_data <- dfs[[i]][dfs[[i]]$Date >= as.Date("2023-01-01"), ]
+
+  if (nrow(filtered_data) > 0) {
+    # Calculate returns for the filtered data
+    returns <- diff(log(filtered_data$Price))
+    
+    # Print the dataframe name (dfnames[i]) and summary statistics
+    print(dfnames[i])
+    print(summary(returns))
+    tsplot(filtered_data$Date[-1], diff(log(filtered_data$Price)), main = dfnames[i], ylim = c(-0.04, 0.04), ylab = '', xlab = '')
+    print(sd(returns))
+  }
+}
+```
+
+
+
+
+## UNIT ROOT TEST
+
+```{r stock index}
 
 for(i in 1:length(dfs)){
   print(dfnames[i])
-  print(tseries:::adf.test(as.data.frame(dfs[i])$Price))
-}
-
-#
-```
-
-
-## ENGLE GRANGER 2 STEP COINTEGRATION TEST
-
-```{r VN - each country}
-# Loop through each dataframe
-
-
-for(i in 2:length(dfs)){
-
-  # Merge VNI with each df
-  df <- Reduce(function(x, y) merge(x, y, by = "Date"), list(VNI, dfs[i]))
-
-  # Rename columns
-  colnames(df) <- c("Date", "VNI", dfnames[i])
-
-  model <- lm(df$VNI ~ df[,3])
-
-  # Conduct ADF test on residuals
-  print(dfnames[i])
-  print(tsplot(residuals(model), main = dfnames[i], ylab = dfnames[i]))
-  print(tseries:::adf.test(residuals(model)))
+  print(tseries:::adf.test(log(as.data.frame(dfs[i])$Price)))
+  print(tseries:::pp.test(log(as.data.frame(dfs[i])$Price)))
 }
 ```
 
-
-
-
-## EG TEST WITH BUILT IN FUNCTION WHOLE DATASET
-
-```{r VN - each country}
-for(i in 2:length(dfs)){
-
-  # Merge VNI with each df
-  df <- Reduce(function(x, y) merge(x, y, by = "Date"), list(VNI, dfs[i]))
- 
-  # Rename columns
-  colnames(df) <- c("Date", "VNI", dfnames[i])
-
-  result <- aTSA::coint.test(df$VNI, df[,3], d = 0)
-
-  # Conduct ADF test on residuals
+```{r stock return 1st difference}
+for(i in 1:length(dfs)){
   print(dfnames[i])
-  print(result)
+  print(tseries:::adf.test(diff(log(as.data.frame(dfs[i])$Price))))
+  print(tseries:::pp.test(diff(log(as.data.frame(dfs[i])$Price))))
 }
-
 ```
 
 ## GRANGER CAUSALITY
 
-```{r VN - each country}
+
+```{r VN - each country pre GFC}
 for(i in 2:length(dfs)){
 
   # Merge VNI with each df
@@ -196,23 +276,147 @@ for(i in 2:length(dfs)){
  
   # Rename columns
   colnames(df) <- c("Date", "VNI", dfnames[i])
+  df <- df %>%
+    filter(Date < as.Date('2007-01-01')) %>%
+    dplyr:::select(-Date)
+  
+  select <- VARselect(df, lag.max = 10)
 
-  result1 <- grangertest(df$VNI, df[,3])
-  result2 <- grangertest(df[,3], df$VNI)
+  result1 <- grangertest(diff(log(df$VNI)), diff(log(df[,2])), order = as.numeric(select$selection[1]))
+  result2 <- grangertest(diff(log(df[,2])), diff(log(df$VNI)), order = as.numeric(select$selection[1]))
 
   # Conduct ADF test on residuals
   print(dfnames[i])
   print(result1)
   print(result2)
 }
-
-#US, JPN, SK exert influence on VNI; VNI does not exert influence on any other TS
 ```
 
 
-##EG TEST 2003 - 2007
+```{r VN - each country during GFC}
+for(i in 2:length(dfs)){
 
-```{r}
+  # Merge VNI with each df
+  df <- Reduce(function(x, y) merge(x, y, by = "Date"), list(VNI, dfs[i]))
+ 
+  # Rename columns
+  colnames(df) <- c("Date", "VNI", dfnames[i])
+  df <- df %>%
+    filter(Date >= as.Date('2007-01-01') & Date < as.Date('2010-01-01')) %>%
+    dplyr:::select(-Date)
+  
+  select <- VARselect(df, lag.max = 10)
+
+  result1 <- grangertest(diff(log(df$VNI)), diff(log(df[,2])), order = as.numeric(select$selection[1]))
+  result2 <- grangertest(diff(log(df[,2])), diff(log(df$VNI)), order = as.numeric(select$selection[1]))
+
+  # Conduct ADF test on residuals
+  print(dfnames[i])
+  print(result1)
+  print(result2)
+}
+```
+
+
+```{r VN - each country post GFC}
+for(i in 2:length(dfs)){
+
+  # Merge VNI with each df
+  df <- Reduce(function(x, y) merge(x, y, by = "Date"), list(VNI, dfs[i]))
+ 
+  # Rename columns
+  colnames(df) <- c("Date", "VNI", dfnames[i])
+  df <- df %>%
+    filter(Date >= as.Date('2010-01-01') & Date < as.Date('2015-01-01')) %>%
+    dplyr:::select(-Date)
+  
+  select <- VARselect(df, lag.max = 10)
+
+  result1 <- grangertest(diff(log(df$VNI)), diff(log(df[,2])), order = as.numeric(select$selection[1]))
+  result2 <- grangertest(diff(log(df[,2])), diff(log(df$VNI)), order = as.numeric(select$selection[1]))
+
+  # Conduct ADF test on residuals
+  print(dfnames[i])
+  print(result1)
+  print(result2)
+}
+```
+
+```{r VN - each country pre Covid}
+for(i in 2:length(dfs)){
+
+  # Merge VNI with each df
+  df <- Reduce(function(x, y) merge(x, y, by = "Date"), list(VNI, dfs[i]))
+ 
+  # Rename columns
+  colnames(df) <- c("Date", "VNI", dfnames[i])
+  df <- df %>%
+    filter(Date >= as.Date('2015-01-01') & Date < as.Date('2020-01-01')) %>%
+    dplyr:::select(-Date)
+  
+  select <- VARselect(df, lag.max = 10)
+
+  result1 <- grangertest(diff(log(df$VNI)), diff(log(df[,2])), order = as.numeric(select$selection[1]))
+  result2 <- grangertest(diff(log(df[,2])), diff(log(df$VNI)), order = as.numeric(select$selection[1]))
+
+  # Conduct ADF test on residuals
+  print(dfnames[i])
+  print(result1)
+  print(result2)
+}
+```
+
+```{r VN - each country during Covid}
+for(i in 2:length(dfs)){
+
+  # Merge VNI with each df
+  df <- Reduce(function(x, y) merge(x, y, by = "Date"), list(VNI, dfs[i]))
+ 
+  # Rename columns
+  colnames(df) <- c("Date", "VNI", dfnames[i])
+  df <- df %>%
+    filter(Date >= as.Date('2020-01-01') & Date < as.Date('2023-01-01')) %>%
+    dplyr:::select(-Date)
+  
+  select <- VARselect(df, lag.max = 10)
+
+  result1 <- grangertest(diff(log(df$VNI)), diff(log(df[,2])), order = as.numeric(select$selection[1]))
+  result2 <- grangertest(diff(log(df[,2])), diff(log(df$VNI)), order = as.numeric(select$selection[1]))
+
+  # Conduct ADF test on residuals
+  print(dfnames[i])
+  print(result1)
+  print(result2)
+}
+```
+
+```{r VN - each country post Covid}
+for(i in 2:length(dfs)){
+
+  # Merge VNI with each df
+  df <- Reduce(function(x, y) merge(x, y, by = "Date"), list(VNI, dfs[i]))
+ 
+  # Rename columns
+  colnames(df) <- c("Date", "VNI", dfnames[i])
+  df <- df %>%
+    filter(Date >= as.Date('2023-01-01')) %>%
+    dplyr:::select(-Date)
+  
+  select <- VARselect(df, lag.max = 10)
+
+  result1 <- grangertest(diff(log(df$VNI)), diff(log(df[,2])), order = as.numeric(select$selection[1]))
+  result2 <- grangertest(diff(log(df[,2])), diff(log(df$VNI)), order = as.numeric(select$selection[1]))
+
+  # Conduct ADF test on residuals
+  print(dfnames[i])
+  print(result1)
+  print(result2)
+}
+```
+
+##EG TEST
+
+```{r EG pre GFC}
 for(i in 2:length(dfs)){
 
   # Merge VNI with each df
@@ -224,7 +428,7 @@ for(i in 2:length(dfs)){
   df <- df %>%
   filter(Date >= as.Date("2003-10-01"), Date < as.Date("2007-01-01"))
 
-  result <- aTSA::coint.test(df$VNI, df[,3], d = 0, output = TRUE)
+  result <- aTSA::coint.test(log(df$VNI), log(df[,3]), d = 0, output = TRUE)
 
   # Conduct ADF test on residuals
   print(dfnames[i])
@@ -233,9 +437,8 @@ for(i in 2:length(dfs)){
 
 ```
 
-##EG TEST 2007 - 2010
 
-```{r}
+```{r EG during GFC}
 for(i in 2:length(dfs)){
 
   # Merge VNI with each df
@@ -247,7 +450,7 @@ for(i in 2:length(dfs)){
   df <- df %>%
   filter(Date >= as.Date("2007-01-01"), Date < as.Date("2010-01-01"))
 
-  result <- aTSA::coint.test(df$VNI, df[,3], d = 0, output = TRUE)
+  result <- aTSA::coint.test(log(df$VNI), log(df[,3]), d = 0, output = TRUE)
 
   # Conduct ADF test on residuals
   print(dfnames[i])
@@ -255,9 +458,8 @@ for(i in 2:length(dfs)){
 }
 ```
 
-##EG TEST 2010 - 2014
 
-```{r}
+```{r EG post GFC}
 for(i in 2:length(dfs)){
 
   # Merge VNI with each df
@@ -267,9 +469,9 @@ for(i in 2:length(dfs)){
   colnames(df) <- c("Date", "VNI", dfnames[i])
   
   df <- df %>%
-  filter(Date >= as.Date("2010-01-01"), Date < as.Date("2014-01-01"))
+  filter(Date >= as.Date("2010-01-01"), Date < as.Date("2015-01-01"))
 
-  result <- aTSA::coint.test(df$VNI, df[,3], d = 0, output = TRUE)
+  result <- aTSA::coint.test(log(df$VNI), log(df[,3]), d = 0, output = TRUE)
 
   # Conduct ADF test on residuals
   print(dfnames[i])
@@ -278,9 +480,7 @@ for(i in 2:length(dfs)){
 ```
 
 
-##EG TEST 2014 - 2020
-
-```{r}
+```{r EG pre Covid}
 for(i in 2:length(dfs)){
 
   # Merge VNI with each df
@@ -290,7 +490,7 @@ for(i in 2:length(dfs)){
   colnames(df) <- c("Date", "VNI", dfnames[i])
   
   df <- df %>%
-  filter(Date >= as.Date("2014-01-01"), Date < as.Date("2020-01-01"))
+  filter(Date >= as.Date("2015-01-01"), Date < as.Date("2020-01-01"))
 
   result <- aTSA::coint.test(df$VNI, df[,3], d = 0, output = TRUE)
 
@@ -300,9 +500,8 @@ for(i in 2:length(dfs)){
 }
 ```
 
-##EG TEST 2020 - 2022
 
-```{r}
+```{r EG during Covid}
 for(i in 2:length(dfs)){
 
   # Merge VNI with each df
@@ -322,9 +521,8 @@ for(i in 2:length(dfs)){
 }
 ```
 
-##EG TEST 2023 - current
 
-```{r}
+```{r EG post Covid}
 for(i in 2:length(dfs)){
 
   # Merge VNI with each df
@@ -345,33 +543,9 @@ for(i in 2:length(dfs)){
 ```
 
 
-## VECM ESTIMATION 2003 - 2007
+##JOHANSEN COINTEGRATION TEST 
 
-```{r}
-for(i in 2:length(dfs)){
-
-  # Merge VNI with each df
-  df <- Reduce(function(x, y) merge(x, y, by = "Date"), list(VNI, dfs[i]))
- 
-  # Rename columns
-  colnames(df) <- c("Date", "VNI", dfnames[i])
-  
-  df <- df %>%
-    filter(Date >= as.Date("2003-10-01"), Date < as.Date("2007-01-01")) %>%
-    dplyr:::select(-Date)
-
-  result <- VECM(df, lag = 1)
-
-  # Conduct ADF test on residuals
-  print(dfnames[i])
-  print(summary(result))
-}
-
-```
-
-##JOHANSEN COINTEGRATION TEST WHOLE DATASET
-
-```{r VN ~ East Asia}
+```{r EA1}
 dfs <- list(VNI, CHN, JPN, HK, SK)
 
 df <- Reduce(function(x, y) merge(x, y, by = "Date"), dfs)
@@ -381,12 +555,16 @@ colnames(df) <- c("Date", "VNI", "CHN", "JPN", "HK", "SK")
 df <- df %>%
   dplyr:::select(-Date)
 
-johansen <- ca.jo(df, type = "eigen", ecdet = "none", K = 2, spec = "longrun")
+select <-VARselect(df, lag.max = 7, type = "const") #4
+select$selection
+
+johansen <- ca.jo(df, type = "eigen", ecdet = "none", K = 3, spec = "longrun")
 summary(johansen)
 ```
 
 
-```{r VN ~ South East Asia}
+
+```{r SEA1}
 dfs <- list(VNI, SGP, THL, MSIA, PLP, IND)
 
 df <- Reduce(function(x, y) merge(x, y, by = "Date"), dfs)
@@ -396,13 +574,15 @@ colnames(df) <- c("Date", "VNI", "SGP", "THL", "MSIA", "PLP", "IND")
 df <- df %>%
   dplyr:::select(-Date)
 
-johansen <- ca.jo(df, type = "eigen", ecdet = "none", K = 2, spec = "longrun")
+select <-VARselect(df, lag.max = 7, type = "const") #7
+select$selection
+
+johansen <- ca.jo(df, type = "eigen", ecdet = "none", K = 6, spec = "longrun")
 summary(johansen)
 ```
 
-## JOHANSEN COINTEGRATION TEST 2020 - 2023
 
-```{r VN ~ East Asia}
+```{r EA2 pre GFC}
 dfs <- list(VNI, CHN, JPN, HK, SK)
 
 df <- Reduce(function(x, y) merge(x, y, by = "Date"), dfs)
@@ -410,12 +590,230 @@ df <- Reduce(function(x, y) merge(x, y, by = "Date"), dfs)
 colnames(df) <- c("Date", "VNI", "CHN", "JPN", "HK", "SK")
 
 df <- df %>%
-  filter(Date > as.Date("2020-01-01"), Date < as.Date("2023-01-01")) %>%
+  filter(Date < as.Date("2007-01-01")) %>%
+  dplyr:::select(-Date)
+
+select <-VARselect(df, lag.max = 7, type = "const") #1
+select$selection
+
+johansen <- ca.jo(df, type = "eigen", ecdet = "none", K = 2, spec = "longrun")
+summary(johansen)
+```
+
+
+```{r SEA pre GFC}
+dfs <- list(VNI, SGP, THL, MSIA, PLP, IND)
+
+df <- Reduce(function(x, y) merge(x, y, by = "Date"), dfs)
+
+colnames(df) <- c("Date", "VNI", "SGP", "THL", "MSIA", "PLP", "IND")
+
+df <- df %>%
+  filter(Date < as.Date("2007-01-01")) %>%
+  dplyr:::select(-Date)
+
+select <-VARselect(df, lag.max = 7, type = "const") #4
+select$selection
+
+johansen <- ca.jo(df, type = "eigen", ecdet = "none", K = 2, spec = "longrun")
+summary(johansen)
+```
+
+
+
+```{r EA during GFC}
+dfs <- list(VNI, CHN, JPN, HK, SK)
+
+df <- Reduce(function(x, y) merge(x, y, by = "Date"), dfs)
+
+colnames(df) <- c("Date", "VNI", "CHN", "JPN", "HK", "SK")
+
+df <- df %>%
+  filter(Date >= as.Date("2007-01-01"), Date < as.Date("2010-01-01")) %>%
+  dplyr:::select(-Date)
+
+select <-VARselect(df, lag.max = 7, type = "const") #2
+select$selection
+
+johansen <- ca.jo(df, type = "eigen", ecdet = "none", K = 2, spec = "longrun")
+summary(johansen)
+```
+
+```{r SEA during GFC}
+dfs <- list(VNI, SGP, THL, MSIA, PLP, IND)
+
+df <- Reduce(function(x, y) merge(x, y, by = "Date"), dfs)
+
+colnames(df) <- c("Date", "VNI", "SGP", "THL", "MSIA", "PLP", "IND")
+
+df <- df %>%
+  filter(Date >= as.Date("2007-01-01"), Date < as.Date("2010-01-01")) %>%
+  dplyr:::select(-Date)
+
+select <-VARselect(df, lag.max = 7, type = "const") #2
+select$selection
+
+johansen <- ca.jo(df, type = "eigen", ecdet = "none", K = 2, spec = "longrun")
+summary(johansen)
+```
+
+```{r SEA3 sans VNI during GFC}
+dfs <- list(SGP, THL, MSIA, PLP, IND)
+
+df <- Reduce(function(x, y) merge(x, y, by = "Date"), dfs)
+
+colnames(df) <- c("Date", "SGP", "THL", "MSIA", "PLP", "IND")
+
+df <- df %>%
+  filter(Date >= as.Date("2007-01-01"), Date < as.Date("2010-01-01")) %>%
+  dplyr:::select(-Date)
+
+select <-VARselect(df, lag.max = 7, type = "const") #2
+select$selection
+
+johansen <- ca.jo(df, type = "eigen", ecdet = "none", K = 2, spec = "longrun")
+summary(johansen)
+```
+
+
+
+```{r EA post GFC}
+dfs <- list(VNI, CHN, JPN, HK, SK)
+
+df <- Reduce(function(x, y) merge(x, y, by = "Date"), dfs)
+
+colnames(df) <- c("Date", "VNI", "CHN", "JPN", "HK", "SK")
+
+df <- df %>%
+  filter(Date >= as.Date("2010-01-01"), Date < as.Date("2015-01-01")) %>%
+  dplyr:::select(-Date)
+
+select <-VARselect(df, lag.max = 7, type = "const") #1
+select$selection
+
+johansen <- ca.jo(df, type = "eigen", ecdet = "none", K = 2, spec = "longrun")
+summary(johansen)
+```
+
+```{r SEA post GFC}
+dfs <- list(VNI, SGP, THL, MSIA, PLP, IND)
+
+df <- Reduce(function(x, y) merge(x, y, by = "Date"), dfs)
+
+colnames(df) <- c("Date", "VNI", "SGP", "THL", "MSIA", "PLP", "IND")
+
+df <- df %>%
+  filter(Date >= as.Date("2010-01-01"), Date < as.Date("2015-01-01")) %>%
+  dplyr:::select(-Date)
+
+select <-VARselect(df, lag.max = 7, type = "const") #4
+select$selection
+
+johansen <- ca.jo(df, type = "eigen", ecdet = "none", K = 3, spec = "longrun")
+summary(johansen)
+```
+
+
+
+```{r EA pre Covid}
+dfs <- list(VNI, CHN, JPN, HK, SK)
+
+df <- Reduce(function(x, y) merge(x, y, by = "Date"), dfs)
+
+colnames(df) <- c("Date", "VNI", "CHN", "JPN", "HK", "SK")
+
+df <- df %>%
+  filter(Date >= as.Date("2015-01-01"), Date < as.Date("2020-01-01")) %>%
+  dplyr:::select(-Date)
+
+select <-VARselect(df, lag.max = 7, type = "const") #3
+select$selection
+
+johansen <- ca.jo(df, type = "eigen", ecdet = "none", K = 2, spec = "longrun")
+summary(johansen)
+```
+
+```{r SEA pre Covid}
+dfs <- list(VNI, SGP, THL, MSIA, PLP, IND)
+
+df <- Reduce(function(x, y) merge(x, y, by = "Date"), dfs)
+
+colnames(df) <- c("Date", "VNI", "SGP", "THL", "MSIA", "PLP", "IND")
+
+df <- df %>%
+  filter(Date >= as.Date("2015-01-01"), Date < as.Date("2020-01-01")) %>%
   dplyr:::select(-Date)
 
 johansen <- ca.jo(df, type = "eigen", ecdet = "none", K = 2, spec = "longrun")
 summary(johansen)
 ```
+
+
+
+```{r EA during Covid}
+dfs <- list(VNI, CHN, JPN, HK, SK)
+
+df <- Reduce(function(x, y) merge(x, y, by = "Date"), dfs)
+
+colnames(df) <- c("Date", "VNI", "CHN", "JPN", "HK", "SK")
+
+df <- df %>%
+  filter(Date >= as.Date("2020-01-01"), Date < as.Date("2023-01-01")) %>%
+  dplyr:::select(-Date)
+
+johansen <- ca.jo(df, type = "eigen", ecdet = "none", K = 2, spec = "longrun")
+summary(johansen)
+```
+
+```{r SEA during Covid}
+dfs <- list(VNI, SGP, THL, MSIA, PLP, IND)
+
+df <- Reduce(function(x, y) merge(x, y, by = "Date"), dfs)
+
+colnames(df) <- c("Date", "VNI", "SGP", "THL", "MSIA", "PLP", "IND")
+
+df <- df %>%
+  filter(Date >= as.Date("2020-01-01"), Date < as.Date("2023-01-01")) %>%
+  dplyr:::select(-Date)
+
+johansen <- ca.jo(df, type = "eigen", ecdet = "none", K = 2, spec = "longrun")
+summary(johansen)
+```
+
+
+
+```{r EA post Covid}
+dfs <- list(VNI, CHN, JPN, HK, SK)
+
+df <- Reduce(function(x, y) merge(x, y, by = "Date"), dfs)
+
+colnames(df) <- c("Date", "VNI", "CHN", "JPN", "HK", "SK")
+
+df <- df %>%
+  filter(Date >= as.Date("2023-01-01")) %>%
+  dplyr:::select(-Date)
+
+johansen <- ca.jo(df, type = "eigen", ecdet = "none", K = 2, spec = "longrun")
+summary(johansen)
+```
+
+```{r SEA post Covid}
+dfs <- list(VNI, SGP, THL, MSIA, PLP, IND)
+
+df <- Reduce(function(x, y) merge(x, y, by = "Date"), dfs)
+
+colnames(df) <- c("Date", "VNI", "SGP", "THL", "MSIA", "PLP", "IND")
+
+df <- df %>%
+  filter(Date >= as.Date("2023-01-01")) %>%
+  dplyr:::select(-Date)
+
+johansen <- ca.jo(df, type = "eigen", ecdet = "none", K = 2, spec = "longrun")
+summary(johansen)
+```
+
+
+
 
 ## STRUCTURAL BREAKS DETECTION
 
