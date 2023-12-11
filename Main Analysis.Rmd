@@ -21,6 +21,8 @@ library(strucchange)
 library(aTSA)
 library(vars)
 library(tsDyn)
+library(stargazer)
+library(ggplot2)
 ```
 
 ## DATA PROCESSING
@@ -47,13 +49,13 @@ IND <- read.csv("Datasets/Jakarta Stock Exchange Composite Index Historical Data
 process <- function(data) {
   data = data %>%
     dplyr::select(Date, Price)
-  data$Date = as.Date(data$Date, "%m/%d/%Y")
-  data$Price = as.numeric(gsub(",", "", data$Price))
-  data = data[order(data$Date),]
+  data$Date = as.Date(data$Date, "%m/%d/%Y")  # Reformat and use Date type variable
+  data$Price = as.numeric(gsub(",", "", data$Price))  # Remove comma string so R can read numeric
+  data = data[order(data$Date),]  # Reorder the dataframe so time flows forward down the rows
   return(data)
 }
 
-# Apply the data processing function to each dataframe
+# Apply the data processing function to each dataframe that can be generalized
 VNI = process(VNI)
 CHN = process(CHN)
 HK = process(HK)
@@ -99,24 +101,50 @@ PLP = PLP %>%
 ```
 
 
-```{r Merge into common df, warning = FALSE}
+## SUMMARY STATISTICS
 
+```{r Base index, warning = FALSE}
 # List the dataframes  
 dfs <- list(VNI, US, CHN, JPN, HK, SK, SGP, THL, MSIA, PLP, IND)
 
 # Merge into one dataframe
-df <- Reduce(function(x, y) merge(x, y, by = "Date"), dfs)
+df <- Reduce(function(x, y) merge(x, y, by = "Date", all = "True"), dfs)
 
 # Rename columns
 colnames(df) <- c("Date", "VNI", "US", "CHN", "JPN", "HK", "SK", "SGP", "THL", "MSIA", "PLP", "IND")
 
-head(df)
+stargazer(df, type = "text")  
 ```
+
+```{r % of daily return}
+
+# Extracting the Date column
+dates <- df$Date
+
+# Calculating percentage returns for each index
+returns_percent_df <- data.frame(Date = dates)  # Initialize a new dataframe with Date column
+
+# Loop through columns (excluding Date) and calculate % returns
+for (col in names(df)[-1]) {  # Exclude the first column (Date)
+  returns_percent_df[[col]] <- c(NA, (df[[col]][-1] - df[[col]][-length(df[[col]])]) / df[[col]][-length(df[[col]])] * 100)
+}
+
+# Summarize the dataframe with % returns
+stargazer(returns_percent_df, type = "text")
+
+```
+
+```{r}
+# Correlation matrix of return %
+round(cor(returns_percent_df%>%dplyr:::select(-Date), use = "na.or.complete"),4)
+```
+
 
 
 ## TIME SERIES VISUALIZATION
 
 ```{r index price}
+dfs <- list(VNI, US, CHN, JPN, HK, SK, SGP, THL, MSIA, PLP, IND)
 dfnames <- list("VNI", "US", "CHN", "JPN", "HK", "SK", "SGP", "THL", "MSIA", "PLP", "IND")
 par(mfrow = c(2,2))
 
@@ -125,128 +153,84 @@ for(i in 1:length(dfnames)){
 }
 ```
 
-```{r log-return index price}
-dfnames <- list("VNI", "US", "CHN", "JPN", "HK", "SK", "SGP", "THL", "MSIA", "PLP", "IND")
+
+
+```{r, warning = FALSE}
+library(ggplot2)
+
+dfs <- list(VNI, CHN, JPN, HK, SK)
+
+dfnames <- c("VNI", "CHN", "JPN", "HK", "SK")
 break_dates <- as.Date(c("2007-01-01", "2010-01-01", "2020-01-01", "2022-01-01"))
 
-par(mfrow = c(2,2))
+# Combine all data frames into a single data frame for ggplot
+combined_df <- bind_rows(dfs, .id = "id") %>%
+  mutate(id = as.factor(id))
 
-for(i in 1:length(dfnames)){
-  tsplot(dfs[[i]]$Date, log(dfs[[i]]$Price), main = dfnames[i], ylim = c(5.0, 11.0), ylab = '', xlab = '')
-  
-  # Add vertical lines at specific dates
-  for (date in break_dates) {
-    abline(v = date, col = "red")
-  }
-}
+# Plot using ggplot
+ggplot(combined_df, aes(x = Date, y = log(Price), color = id)) +
+  geom_line(size = 0.5) +
+  geom_vline(xintercept = as.numeric(break_dates), color = "red") +
+  scale_color_manual(values = c("#C61B1B", "#E1D81C", "#11690E", "#37E3D4", "#A44BD0"), labels = dfnames) +
+  ylim(4.0, 11.0) +
+  labs(x = '', y = "Logged Index Price", color = "Country") +
+  theme_minimal() +
+  theme(legend.position = "right")
 
 ```
 
+```{r, warning = FALSE}
 
+dfs <- list(VNI, SGP, THL, MSIA, PLP, IND)
 
-```{r differential log return}
-dfnames <- list("VNI", "US", "CHN", "JPN", "HK", "SK", "SGP", "THL", "MSIA", "PLP", "IND")
+dfnames <- c("VNI", "SGP", "THL", "MSIA", "PLP", "IND")
 break_dates <- as.Date(c("2007-01-01", "2010-01-01", "2020-01-01", "2022-01-01"))
 
-par(mfrow = c(2,2))
+# Combine all data frames into a single data frame for ggplot
+combined_df <- bind_rows(dfs, .id = "id") %>%
+  mutate(id = as.factor(id))
 
-for(i in 1:length(dfnames)){
-  tsplot(dfs[[i]]$Date[-1], diff(log(dfs[[i]]$Price)), main = dfnames[i], ylim = c(-0.1, 0.1), ylab = '', xlab = '')
-  
-  # Add vertical lines at specific dates
-  for (date in break_dates) {
-    abline(v = date, col = "red")
-  }
-}
+# Plot using ggplot
+ggplot(combined_df, aes(x = Date, y = log(Price), color = id)) +
+  geom_line(size = 0.5) +
+  geom_vline(xintercept = as.numeric(break_dates), color = "red") +
+  scale_color_manual(values = c("#C61B1B", "#E1D81C", "#11690E", "#AD6F16", "#A44BD0", "#37E3D4"), labels = dfnames) +
+  ylim(4.0, 11.0) +
+  labs(x = "", y = "Logged Index Price", color = "Country") +
+  theme_minimal() +
+  theme(legend.position = "right")
 
 ```
-
-## SUMMARY STATISTICS
-
 ```{r}
-for(i in 1:length(dfs)){
-  returns <- diff(log(as.data.frame(dfs[i])$Price))
-  print(dfnames[i])
-  print(summary(returns))
-}
+dfs <- list(VNI, US)
+
+dfnames <- c("VNI", "US")
+break_dates <- as.Date(c("2007-01-01", "2010-01-01", "2020-01-01", "2022-01-01"))
+
+# Combine all data frames into a single data frame for ggplot
+combined_df <- bind_rows(dfs, .id = "id") %>%
+  mutate(id = as.factor(id))
+
+# Plot using ggplot
+ggplot(combined_df, aes(x = Date, y = log(Price), color = id)) +
+  geom_line(size = 0.5) +
+  geom_vline(xintercept = as.numeric(break_dates), color = "red") +
+  scale_color_manual(values = c("#C61B1B", "#E1D81C"), labels = dfnames) +
+  ylim(4.0, 11.0) +
+  labs(x = "Date", y = "Logged Index Price", color = "Country") +
+  theme_minimal() +
+  theme(legend.position = "right")
 ```
-
-```{r pre GFC}
-for (i in 1:length(dfs)) {
-  # Filter the data frame to include only rows before 2007-01-01
-  filtered_data <- dfs[[i]][dfs[[i]]$Date < as.Date("2007-01-01"), ]
-
-  if (nrow(filtered_data) > 0) {
-    # Calculate returns for the filtered data
-    returns <- diff(log(filtered_data$Price))
-    
-    # Print the dataframe name (dfnames[i]) and summary statistics
-    print(dfnames[i])
-    print(summary(returns))
-    tsplot(filtered_data$Date[-1], diff(log(filtered_data$Price)), main = dfnames[i], ylim = c(-0.05, 0.05), ylab = '', xlab = '')
-    print(sd(returns))
-  }
-}
-```
-
-```{r post GFC}
-for (i in 1:length(dfs)) {
-  # Filter the data frame to include only rows after 2010 and before 2015
-  filtered_data <- dfs[[i]][dfs[[i]]$Date >= as.Date("2010-01-01") & dfs[[i]]$Date < as.Date("2015-01-01"), ]
-
-  if (nrow(filtered_data) > 0) {
-    # Calculate returns for the filtered data
-    returns <- diff(log(filtered_data$Price))
-    
-    # Print the dataframe name (dfnames[i]) and summary statistics
-    print(dfnames[i])
-    print(summary(returns))
-    tsplot(filtered_data$Date[-1], diff(log(filtered_data$Price)), main = dfnames[i], ylim = c(-0.05, 0.05), ylab = '', xlab = '')
-    print(sd(returns))
-  }
-}
-```
-
-```{r pre Covid}
-for (i in 1:length(dfs)) {
-  # Filter the data frame to include only rows after 2015 and before 2020
-  filtered_data <- dfs[[i]][dfs[[i]]$Date >= as.Date("2015-01-01") & dfs[[i]]$Date < as.Date("2020-01-01"), ]
-
-  if (nrow(filtered_data) > 0) {
-    # Calculate returns for the filtered data
-    returns <- diff(log(filtered_data$Price))
-    
-    # Print the dataframe name (dfnames[i]) and summary statistics
-    print(dfnames[i])
-    print(summary(returns))
-    tsplot(filtered_data$Date[-1], diff(log(filtered_data$Price)), main = dfnames[i], ylim = c(-0.05, 0.05), ylab = '', xlab = '')
-    print(sd(returns))
-  }
-}
-```
-
-```{r post Covid}
-for (i in 1:length(dfs)) {
-  # Filter the data frame to include only rows after 2023
-  filtered_data <- dfs[[i]][dfs[[i]]$Date >= as.Date("2023-01-01"), ]
-
-  if (nrow(filtered_data) > 0) {
-    # Calculate returns for the filtered data
-    returns <- diff(log(filtered_data$Price))
-    
-    # Print the dataframe name (dfnames[i]) and summary statistics
-    print(dfnames[i])
-    print(summary(returns))
-    tsplot(filtered_data$Date[-1], diff(log(filtered_data$Price)), main = dfnames[i], ylim = c(-0.04, 0.04), ylab = '', xlab = '')
-    print(sd(returns))
-  }
-}
-```
-
 
 
 
 ## UNIT ROOT TEST
+
+```{r}
+dfs <- list(VNI, US, CHN, JPN, HK, SK, SGP, THL, MSIA, PLP, IND)
+dfnames <- list("VNI", "US", "CHN", "JPN", "HK", "SK", "SGP", "THL", "MSIA", "PLP", "IND")
+```
+
 
 ```{r stock index}
 
@@ -257,7 +241,7 @@ for(i in 1:length(dfs)){
 }
 ```
 
-```{r stock return 1st difference}
+```{r stock return 1st difference, warning = FALSE}
 for(i in 1:length(dfs)){
   print(dfnames[i])
   print(tseries:::adf.test(diff(log(as.data.frame(dfs[i])$Price))))
@@ -267,6 +251,7 @@ for(i in 1:length(dfs)){
 
 ## GRANGER CAUSALITY
 
+Throughout this test, in testing for the number of VAR lags, we chose a good number as the max possible lags to be 10. We assume this would be sufficient to capture all short term price information as the Granger causality test is intended for determining short term linkages.
 
 ```{r VN - each country pre GFC}
 for(i in 2:length(dfs)){
@@ -545,7 +530,9 @@ for(i in 2:length(dfs)){
 
 ##JOHANSEN COINTEGRATION TEST 
 
-```{r EA1}
+Throughout this test, in selecting VAR lag order, we assume that a good number for the max number of lags would be 7. 
+
+```{r EA1, warning = FALSE}
 dfs <- list(VNI, CHN, JPN, HK, SK)
 
 df <- Reduce(function(x, y) merge(x, y, by = "Date"), dfs)
@@ -815,31 +802,7 @@ summary(johansen)
 
 
 
-## STRUCTURAL BREAKS DETECTION
 
-```{r}
-
-dfs <- list(VNI, US, CHN, JPN, HK, SK, SGP, THL, MSIA, PLP, IND)
-
-for(i in 1:length(dfs)){
-  y = as.data.frame(dfs[i])$Price
-
-  dat <- tibble(ylag0 = y,
-                ylag1 = lag(y)
-                ) %>%
-    drop_na()
-
-  qlr <- Fstats(ylag0 ~ ylag1, data = dat)
-
-  bp <- breakpoints(qlr, h = 2, breaks = NULL)
-  bp
-
-  sctest(qlr, type = "supF")
-
-  plot(qlr, main = paste(dfnames[i], as.data.frame(dfs[i])[as.numeric(bp[1]), 1]))
-  lines(bp)
-}
-```
 
 
 
